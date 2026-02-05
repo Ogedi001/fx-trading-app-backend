@@ -1,12 +1,16 @@
 import { Currency } from 'src/common/enums/currency.enum';
-import { Entity, Unique, BaseEntity, ManyToOne, Column } from 'typeorm';
-import { Wallet } from './wallet.entity';
+import { Entity, Unique, ManyToOne, Column } from 'typeorm';
+import { WalletEntity } from './wallet.entity';
+import { BaseEntity } from 'src/common/base/base.entity';
 
 @Entity('wallet_balances')
 @Unique(['wallet', 'currency'])
-export class WalletBalance extends BaseEntity {
-  @ManyToOne(() => Wallet, (wallet) => wallet.balances)
-  wallet: Wallet;
+export class WalletBalanceEntity extends BaseEntity {
+  @Column()
+  walletId: string;
+
+  @ManyToOne(() => WalletEntity, (wallet) => wallet.balances)
+  wallet: WalletEntity;
 
   @Column({ type: 'enum', enum: Currency })
   currency: Currency;
