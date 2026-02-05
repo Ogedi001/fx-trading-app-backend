@@ -18,7 +18,7 @@ export class ResponseInterceptor implements NestInterceptor {
           message: response?.message || 'Request successful',
           data: response?.data ?? response,
           meta: {
-            requestId: request.requestId,
+            requestId: request.id,
             timestamp: new Date().toISOString(),
             version: process.env.API_VERSION || 'v1',
             extra: response?.metaExtra,
