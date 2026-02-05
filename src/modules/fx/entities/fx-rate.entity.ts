@@ -1,20 +1,21 @@
-import { BaseEntity, Column, Entity, Unique } from 'typeorm';
-
+import { Currency } from 'src/common/enums/currency.enum';
+import { Column, Entity, Index } from 'typeorm';
+import { BaseEntity } from 'src/common/base/base.entity';
 @Entity('fx_rates')
-@Unique(['baseCurrency', 'quoteCurrency'])
-export class FxRate extends BaseEntity {
-  @Column()
-  baseCurrency: string;
+@Index(['baseCurrency', 'targetCurrency'])
+export class FxRateEntity extends BaseEntity {
+  @Column({ type: 'enum', enum: Currency })
+  baseCurrency: Currency;
 
-  @Column()
-  quoteCurrency: string;
+  @Column({ type: 'enum', enum: Currency })
+  targetCurrency: Currency;
 
-  @Column('decimal', { precision: 18, scale: 6 })
+  @Column({ type: 'decimal', precision: 18, scale: 8 })
   rate: string;
 
   @Column()
   source: string;
 
-  @Column()
-  fetchedAt: Date;
+  @Column({ type: 'timestamptz' })
+  validUntil: Date;
 }
