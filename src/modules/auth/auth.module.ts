@@ -5,8 +5,11 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './controllers/auth.controller';
 import { AuthService } from './services/auth.service';
 import { StringValue } from 'ms';
+import { UsersModule } from '../users/users.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { TokenService } from './services/token.service';
 
-//import { JwtStrategy } from './strategies/jwt.strategy';
+import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
@@ -17,9 +20,11 @@ import { StringValue } from 'ms';
         expiresIn: (process.env.JWT_EXPIRES_IN ?? '1d') as StringValue,
       },
     }),
+    UsersModule,
+    NotificationsModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService /*JwtStrategy*/],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, TokenService],
+  exports: [AuthService, TokenService],
 })
 export class AuthModule {}
