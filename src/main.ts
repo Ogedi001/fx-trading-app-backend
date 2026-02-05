@@ -1,29 +1,69 @@
 import 'reflect-metadata';
-
-/**
- * This is not a production server yet!
- * This is only a minimal backend to get started.
- */
-
-import { Logger } from '@nestjs/common';
+import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
 import {
   FastifyAdapter,
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
+import helmet from '@fastify/helmet';
+import compress from '@fastify/compress';
+import { randomUUID } from 'crypto';
+
+import { AppModule } from './app.module';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
+import { GlobalValidationPipe } from './common/pipes/global-validation.pipe';
 
 async function bootstrap() {
+  const adapter = new FastifyAdapter({
+    genReqId: () => randomUUID(), // Fastify-native requestId
+  });
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    adapter,
+    {
+      bufferLogs: true,
+    },
   );
+
   const globalPrefix = 'api';
-  app.setGlobalPrefix(globalPrefix);
+  app.setGlobalPrefix(globalPrefix, {
+    exclude: [
+      { path: '/', method: RequestMethod.GET },
+      { path: '/health', method: RequestMethod.GET },
+    ],
+  });
+
+  // Security headers
+  await app.register(helmet);
+
+  // Compression
+  await app.register(compress);
+
+  // CORS
+  app.enableCors({
+    origin: '*', // tighten in prod
+    credentials: true,
+  });
+
+  // Global pipes (DTO validation safety net)
+  app.useGlobalPipes(GlobalValidationPipe);
+
+  // Global Interceptor (success responses)
+  app.useGlobalInterceptors(new ResponseInterceptor());
+
+  // Global Exception Filter (error responses)
+  app.useGlobalFilters(new GlobalExceptionFilter());
+
+  // Graceful shutdown
+  app.enableShutdownHooks();
+
   const port = process.env.PORT || 3000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
+
   Logger.log(
-    `🚀 Application is running on: http://localhost:${port}/${globalPrefix}`,
+    `🚀 Application running at http://localhost:${port}/${globalPrefix}`,
   );
 }
 
