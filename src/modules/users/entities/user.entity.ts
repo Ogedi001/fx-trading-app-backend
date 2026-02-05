@@ -1,17 +1,23 @@
-import { BaseEntity, Entity, Column, OneToOne } from 'typeorm';
-import { Wallet } from '../wallets/wallet.entity';
+import { BaseEntity } from 'src/common/base/base.entity';
+import { UserRole } from 'src/common/enums/user-role.enum';
+import { WalletEntity } from 'src/modules/wallets/entities/wallet.entity';
+import { Entity, Column, OneToOne, Index } from 'typeorm';
 
 @Entity('users')
-export class User extends BaseEntity {
-  @Column({ unique: true })
+@Index(['email'], { unique: true })
+export class UserEntity extends BaseEntity {
+  @Column()
   email: string;
 
   @Column()
-  passwordHash: string;
+  password: string;
 
   @Column({ default: false })
   isVerified: boolean;
 
-  @OneToOne(() => Wallet, (wallet) => wallet.user)
-  wallet: Wallet;
+  @Column({ type: 'enum', enum: UserRole })
+  role: UserRole;
+
+  @OneToOne(() => WalletEntity, (wallet) => wallet.user)
+  wallet: WalletEntity;
 }
