@@ -1,8 +1,21 @@
-import { z } from 'zod';
+import { IsEmail, IsString, Length } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
-export const VerifyOtpSchema = z.object({
-  email: z.string().email(),
-  otp: z.string().length(6),
-});
+export class VerifyOtpDto {
+  @ApiProperty({
+    example: 'user@example.com',
+    description: 'User email address',
+  })
+  @IsEmail()
+  email: string;
 
-export type VerifyOtpDto = z.infer<typeof VerifyOtpSchema>;
+  @ApiProperty({
+    example: '123456',
+    description: 'One-time password sent to email, exactly 6 digits',
+    minLength: 6,
+    maxLength: 6,
+  })
+  @IsString()
+  @Length(6, 6)
+  otp: string;
+}

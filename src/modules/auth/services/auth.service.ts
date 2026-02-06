@@ -11,6 +11,7 @@ import { UsersService } from 'src/modules/users/services/users.service';
 import { TokenService } from './token.service';
 import { compare, encrypt } from 'src/common/utils/crypto.util';
 import { MailService } from 'src/modules/notifications/services/mail.service';
+import { WalletsService } from 'src/modules/wallets/services/wallets.service';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +20,7 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly tokenService: TokenService,
     private readonly jwtService: JwtService,
+    private readonly walletsService: WalletsService,
   ) {}
 
   // REGISTER
@@ -38,6 +40,8 @@ export class AuthService {
       password: hashedPassword,
       isVerified: false,
     });
+
+    await this.walletsService.createWalletForUser(user.id);
 
     const verificationToken =
       await this.tokenService.generateVerifyToken(email);
@@ -112,9 +116,9 @@ export class AuthService {
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS);
     }
 
-    if (!user.isVerified) {
-      throw new UnauthorizedException(ErrorCodes.AUTH_EMAIL_NOT_VERIFIED);
-    }
+    // if (!user.isVerified) {
+    //   throw new UnauthorizedException(ErrorCodes.AUTH_EMAIL_NOT_VERIFIED);
+    // }
 
     const passwordValid = await compare.password(password, user.password);
     if (!passwordValid) {

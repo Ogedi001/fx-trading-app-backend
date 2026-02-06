@@ -1,8 +1,20 @@
-import { z } from 'zod';
+import { IsEmail, IsString, MinLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
-export const RegisterSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
+export class RegisterDto {
+  @ApiProperty({
+    example: 'user@example.com',
+    description: 'User email address',
+  })
+  @IsEmail()
+  email: string;
 
-export type RegisterDto = z.infer<typeof RegisterSchema>;
+  @ApiProperty({
+    example: 'Password@123',
+    description: 'User password, minimum 8 characters',
+    minLength: 8,
+  })
+  @IsString()
+  @MinLength(8)
+  password: string;
+}

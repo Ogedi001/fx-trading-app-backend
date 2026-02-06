@@ -10,6 +10,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { TokenService } from './services/token.service';
 
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { WalletsModule } from '../wallets/wallets.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     }),
     UsersModule,
     NotificationsModule,
+    WalletsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, TokenService],
