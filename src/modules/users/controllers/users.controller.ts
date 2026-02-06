@@ -39,7 +39,12 @@ export class UsersController {
     description: 'Unauthorized - invalid or missing token',
   })
   async me(@CurrentUser() user: UserEntity) {
-    return user;
+    const dbUser = await this.usersService.findById(user.id);
+    if (!dbUser) return null;
+
+    // remove password before returning
+    const { password, ...safeUser } = dbUser;
+    return safeUser;
   }
 
   @Get()
