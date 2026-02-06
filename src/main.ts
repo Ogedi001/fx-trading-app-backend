@@ -9,6 +9,8 @@ import helmet from '@fastify/helmet';
 import compress from '@fastify/compress';
 import { randomUUID } from 'crypto';
 
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
@@ -35,6 +37,24 @@ async function bootstrap() {
     ],
   });
 
+  // ---------------- SWAGGER SETUP ----------------
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('FX Trading API')
+    .setDescription('Wallet, FX Conversion & Trading API')
+    .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+      },
+      'access-token',
+    )
+    .build();
+
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+
+  SwaggerModule.setup('api/docs', app, document);
   // Security headers
   await app.register(helmet);
 
