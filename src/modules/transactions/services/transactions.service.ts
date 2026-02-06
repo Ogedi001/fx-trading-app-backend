@@ -4,6 +4,7 @@ import { TransactionEntity } from '../entities/transaction.entity';
 import { ForbiddenException, NotFoundException } from 'src/common/exceptions';
 import { ErrorCodes } from 'src/common/constants/error-codes';
 import { UserRole } from 'src/common/enums/user-role.enum';
+import { UserEntity } from 'src/modules/users/entities/user.entity';
 
 @Injectable()
 export class TransactionsService {
@@ -16,8 +17,10 @@ export class TransactionsService {
     return this.transactionRepo.findAllByUser(userId);
   }
 
-  async findById(id: string, user: any): Promise<TransactionEntity> {
+  async findById(id: string, user: UserEntity): Promise<TransactionEntity> {
     const tx = await this.transactionRepo.findById(id);
+
+    console.log({ tx });
 
     if (!tx) {
       throw new NotFoundException(
@@ -28,7 +31,7 @@ export class TransactionsService {
 
     // Owner or admin/support
     if (
-      tx.userId !== user.userId &&
+      tx.userId !== user.id &&
       user.role !== UserRole.ADMIN &&
       user.role !== UserRole.SUPPORT
     ) {

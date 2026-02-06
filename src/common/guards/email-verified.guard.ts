@@ -11,9 +11,7 @@ export class EmailVerifiedGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    console.log({ user });
     const dbUser = await this.usersService.findById(user.id);
-    console.log({ dbUser });
     if (!dbUser) {
       throw new UnauthorizedException(ErrorCodes.USER_NOT_FOUND);
     }
