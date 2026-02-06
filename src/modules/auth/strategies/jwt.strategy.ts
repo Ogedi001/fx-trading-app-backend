@@ -18,12 +18,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(req: FastifyRequest, payload: any) {
-    console.log('✅ JwtStrategy validate called');
-    console.log('payload:', payload);
-
     const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
-
-    console.log('token:', token);
 
     if (!token) {
       throw new UnauthorizedException(
