@@ -3,10 +3,14 @@ import { FxRateCacheService } from './fx-rate-cache.service';
 import { NotFoundException } from 'src/common/exceptions';
 import { ErrorCodes } from 'src/common/constants/error-codes';
 import { Currency } from 'src/common/enums/currency.enum';
+import { FxService } from './fx.service';
 
 @Injectable()
 export class FxCalculationService {
-  constructor(private readonly fxCache: FxRateCacheService) {}
+  constructor(
+    private readonly fxCache: FxRateCacheService,
+    private readonly fxService: FxService,
+  ) {}
 
   calculate(amount: string, rate: string): string {
     return (Number(amount) * Number(rate)).toFixed(8);
@@ -20,23 +24,24 @@ export class FxCalculationService {
       };
     }
 
-    const rateEntity = await this.fxCache.getCachedRate(from, to);
-    if (!rateEntity) {
+    const { rate, validUntil } = await this.fxService.getRate(from, to);
+    console.log({ rate });
+    if (!rate) {
       throw new NotFoundException(
         ErrorCodes.FX_RATE_NOT_FOUND,
         'FX rate not available',
       );
     }
 
-    const converted = (Number(amount) * Number(rateEntity.rate)).toFixed(8);
+    const converted = (Number(amount) * Number(rate)).toFixed(8);
 
     return {
-      rate: rateEntity.rate,
+      rate: rate,
       fromAmount: amount,
       toAmount: converted,
       base: from,
       target: to,
-      validUntil: rateEntity.validUntil,
+      validUntil,
     };
   }
 }

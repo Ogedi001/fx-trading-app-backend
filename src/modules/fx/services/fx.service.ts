@@ -12,8 +12,11 @@ export class FxService {
     private readonly fxApiAdapter: FxApiAdapter,
   ) {}
 
-  async getRate(base: Currency, target: Currency): Promise<string> {
-    if (base === target) return '1';
+  async getRate(
+    base: Currency,
+    target: Currency,
+  ): Promise<{ rate: string; validUntil: Date }> {
+    if (base === target) return { rate: '1', validUntil: new Date() };
 
     let rate = await this.cacheService.getCachedRate(base, target);
 
@@ -36,7 +39,10 @@ export class FxService {
       );
     }
 
-    return rate.rate;
+    return {
+      rate: rate.rate,
+      validUntil: rate.validUntil,
+    };
   }
 
   async getAllRates(base: Currency): Promise<Record<string, number>> {
