@@ -7,12 +7,18 @@ import { WalletBalanceRepository } from './repositories/wallet-balance.repositor
 import { WalletDomain } from './domain/wallet.domain';
 import { BalanceCalculator } from './domain/balance-calculator';
 import { FxModule } from '../fx/fx.module';
+import { WalletsService } from './services/wallets.service';
+import { WalletsController } from './controllers/wallets.controller';
+
+import { TransactionsModule } from '../transactions/transactions.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([WalletEntity, WalletBalanceEntity]),
     FxModule,
+    TransactionsModule,
   ],
+  controllers: [WalletsController],
   providers: [
     WalletRepository,
     WalletBalanceRepository,
@@ -25,9 +31,11 @@ import { FxModule } from '../fx/fx.module';
       provide: 'IWalletBalanceRepository',
       useClass: WalletBalanceRepository,
     },
+
     WalletDomain,
+    WalletsService,
     BalanceCalculator,
   ],
-  exports: ['IWalletRepository', 'IWalletBalanceRepository'],
+  exports: ['IWalletRepository', 'IWalletBalanceRepository', WalletsService],
 })
 export class WalletsModule {}
