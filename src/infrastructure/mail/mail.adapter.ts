@@ -32,12 +32,29 @@ export class BrevoMailAdapter implements MailInterface {
       email: mailConfig.BREVO_SENDER_EMAIL,
     };
 
-    try {
-      await client.sendTransacEmail(email);
-      this.logger.log(`Email sent to ${options.to.join(', ')}`);
-    } catch (error) {
-      this.logger.error('Failed to send email', error);
-      throw error;
+    const maxRetries = 3;
+    let attempt = 0;
+
+    while (attempt < maxRetries) {
+      try {
+        attempt++;
+        await client.sendTransacEmail(email);
+        this.logger.log(
+          `Email sent to ${options.to.join(', ')} (attempt ${attempt})`,
+        );
+        return; // success, exit
+      } catch (error) {
+        this.logger.error(`Failed to send email (attempt ${attempt})`, error);
+
+        if (attempt >= maxRetries) {
+          // rethrow after final attempt
+          throw error;
+        }
+
+        // exponential backoff: wait 2^attempt * 500ms
+        const delay = Math.pow(2, attempt) * 500;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
   }
 }

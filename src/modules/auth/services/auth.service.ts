@@ -4,7 +4,7 @@ import {
   ValidationException,
 } from 'src/common/exceptions';
 import { ErrorCodes } from 'src/common/constants/error-codes';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from 'src/modules/users/services/users.service';
 
@@ -15,6 +15,8 @@ import { WalletsService } from 'src/modules/wallets/services/wallets.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly mailService: MailService,
@@ -46,11 +48,15 @@ export class AuthService {
     const verificationToken =
       await this.tokenService.generateVerifyToken(email);
 
-    await this.mailService.sendVerificationEmail(
-      user.email,
-      user.email.split('@')[0],
-      verificationToken,
-    );
+    this.mailService
+      .sendVerificationEmail(
+        user.email,
+        user.email.split('@')[0],
+        verificationToken,
+      )
+      .catch((err) => {
+        this.logger.error('Failed to send verification email', err);
+      });
 
     return { id: user.id, email: user.email };
   }
@@ -70,11 +76,11 @@ export class AuthService {
 
     await this.tokenService.validateVerifyToken(otp, email);
 
-    await this.mailService.sendWelcomeEmail(
-      user.email,
-      user.email.split('@')[0],
-    );
-
+    this.mailService
+      .sendWelcomeEmail(user.email, user.email.split('@')[0])
+      .catch((err) => {
+        this.logger.error('Failed to send vwelcome email', err);
+      });
     await this.usersService.markVerified(user.id);
 
     return { verified: true };
