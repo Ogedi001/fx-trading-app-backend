@@ -40,6 +40,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
     }
 
+    // Log the exception for debugging (stack traces will appear in server logs)
+    // eslint-disable-next-line no-console
+    console.error('Unhandled exception caught by GlobalExceptionFilter:', exception);
+
     reply.status(status).send({
       success: false,
       error: {
