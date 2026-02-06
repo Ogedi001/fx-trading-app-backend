@@ -23,6 +23,6 @@ import { FxController } from './controllers/fx.controller';
     FxCalculationService,
     FxService,
   ],
-  exports: ['IFxRateRepository', FxCalculationService],
+  exports: ['IFxRateRepository', FxCalculationService, FxService],
 })
 export class FxModule {}

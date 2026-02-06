@@ -14,7 +14,7 @@ import { TransactionStatus } from 'src/common/enums/transaction-status.enum';
 import { TransactionEntity } from 'src/modules/transactions/entities/transaction.entity';
 import { WalletStatus } from 'src/common/enums/wallet-status.enum';
 import { WalletBalanceEntity } from '../entities/wallet-balance.entity';
-//import { FxCalculationService } from 'src/modules/fx/services/fx-calculation.service';
+import { FxService } from 'src/modules/fx/services/fx.service';
 
 @Injectable()
 export class WalletsService {
@@ -28,7 +28,7 @@ export class WalletsService {
     @Inject('ITransactionRepository')
     private readonly transactionRepo: ITransactionRepository,
 
-    //private readonly fxCalculationService: FxCalculationService,
+    private readonly fxService: FxService,
   ) {}
 
   //  Create wallet + initial NGN balance
@@ -174,7 +174,6 @@ export class WalletsService {
     from: Currency,
     to: Currency,
     amount: string,
-    rate: string,
     idempotencyKey: string,
   ) {
     const wallet = await this.getMyWallet(userId);
@@ -196,6 +195,8 @@ export class WalletsService {
 
     await this.balanceRepo.lockBalance(fromBalance.id);
     await this.balanceRepo.lockBalance(toBalance.id);
+
+    const rate = await this.fxService.getRate(from, to);
 
     const converted = (Number(amount) * Number(rate)).toFixed(8);
 

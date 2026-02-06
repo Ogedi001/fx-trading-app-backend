@@ -11,12 +11,14 @@ import { WalletsService } from './services/wallets.service';
 import { WalletsController } from './controllers/wallets.controller';
 
 import { TransactionsModule } from '../transactions/transactions.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([WalletEntity, WalletBalanceEntity]),
     FxModule,
     TransactionsModule,
+    UsersModule,
   ],
   controllers: [WalletsController],
   providers: [
