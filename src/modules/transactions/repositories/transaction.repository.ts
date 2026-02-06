@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, QueryRunner, DeepPartial } from 'typeorm';
 import { TransactionEntity } from '../entities/transaction.entity';
 import { ITransactionRepository } from './transaction.repository.interface';
 
@@ -11,22 +11,28 @@ export class TransactionRepository implements ITransactionRepository {
     private readonly repo: Repository<TransactionEntity>,
   ) {}
 
-  findById(id: string) {
-    return this.repo.findOne({ where: { id } });
+  findById(id: string, queryRunner?: QueryRunner) {
+    const manager = queryRunner?.manager ?? this.repo.manager;
+    return manager.findOne(TransactionEntity, { where: { id } });
   }
 
-  findByIdempotencyKey(key: string) {
-    return this.repo.findOne({ where: { idempotencyKey: key } });
+  findByIdempotencyKey(userId: string, key: string, queryRunner?: QueryRunner) {
+    const manager = queryRunner?.manager ?? this.repo.manager;
+    return manager.findOne(TransactionEntity, {
+      where: { userId, idempotencyKey: key },
+    });
   }
 
-  findAllByUser(userId: string) {
-    return this.repo.find({
+  findAllByUser(userId: string, queryRunner?: QueryRunner) {
+    const manager = queryRunner?.manager ?? this.repo.manager;
+    return manager.find(TransactionEntity, {
       where: { userId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  save(tx: TransactionEntity) {
-    return this.repo.save(tx);
+  save(tx: DeepPartial<TransactionEntity>, queryRunner?: QueryRunner) {
+    const manager = queryRunner?.manager ?? this.repo.manager;
+    return manager.save(TransactionEntity, tx);
   }
 }

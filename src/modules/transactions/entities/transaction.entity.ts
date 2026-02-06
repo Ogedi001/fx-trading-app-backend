@@ -3,10 +3,11 @@ import { Currency } from 'src/common/enums/currency.enum';
 import { TransactionStatus } from 'src/common/enums/transaction-status.enum';
 import { TransactionType } from 'src/common/enums/transaction-type.enum';
 import { WalletEntity } from 'src/modules/wallets/entities/wallet.entity';
-import { Column, Entity, Index, ManyToOne } from 'typeorm';
+import { Column, Entity, Index, ManyToOne, Unique } from 'typeorm';
 
 @Entity('transactions')
-@Index(['idempotencyKey'], { unique: true })
+@Unique(['userId', 'idempotencyKey'])
+@Index(['idempotencyKey'])
 export class TransactionEntity extends BaseEntity {
   @Column()
   walletId: string;

@@ -47,10 +47,8 @@ export class TransactionsController {
     },
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getMyTransactions(@CurrentUser() user) {
-    const transactions = await this.transactionsService.findAllForUser(
-      user.userId,
-    );
+  async getMyTransactions(@CurrentUser() user: UserEntity) {
+    const transactions = await this.transactionsService.findAllForUser(user.id);
     return {
       message: 'Transactions retrieved successfully',
       data: transactions,
