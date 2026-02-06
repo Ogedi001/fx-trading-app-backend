@@ -19,6 +19,13 @@ export class TransactionRepository implements ITransactionRepository {
     return this.repo.findOne({ where: { idempotencyKey: key } });
   }
 
+  findAllByUser(userId: string) {
+    return this.repo.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   save(tx: TransactionEntity) {
     return this.repo.save(tx);
   }

@@ -1,25 +1,23 @@
 // src/modules/transactions/transactions.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-// import { TransactionsController } from './controllers/transactions.controller';
-// import { TransactionsService } from './services/transactions.service';
-// import { TransactionRecorderService } from './services/transaction-recorder.service';
-// import { IdempotencyService } from './services/idempotency.service';
 import { TransactionEntity } from './entities/transaction.entity.js';
 import { TransactionRepository } from './repositories/transaction.repository.js';
 import { TransactionDomain } from './domain/transaction.domain.js';
-import { WalletsModule } from '../wallets/wallets.module.js';
+import { TransactionsController } from './controllers/transactions.controller.js';
+import { TransactionsService } from './services/transactions.service.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TransactionEntity]), WalletsModule],
-  controllers: [],
+  imports: [TypeOrmModule.forFeature([TransactionEntity])],
+  controllers: [TransactionsController],
   providers: [
-    // TransactionsService,
-    // TransactionRecorderService,
-    // IdempotencyService,
-    TransactionRepository,
+    TransactionsService,
     TransactionDomain,
+    {
+      provide: 'ITransactionRepository',
+      useClass: TransactionRepository,
+    },
   ],
-  exports: [],
+  exports: ['ITransactionRepository', TransactionsService],
 })
 export class TransactionsModule {}
