@@ -1,7 +1,13 @@
+import { ErrorCodes } from 'src/common/constants/error-codes';
+import { BadRequestException } from 'src/common/exceptions';
+
 export class RateValidator {
   static validate(rate: string) {
     if (Number(rate) <= 0) {
-      throw new Error('Invalid FX rate');
+      throw new BadRequestException(
+        ErrorCodes.FX_RATE_INVALID,
+        'Invalid FX rate',
+      );
     }
   }
 }
