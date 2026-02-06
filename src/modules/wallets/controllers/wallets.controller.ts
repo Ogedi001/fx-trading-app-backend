@@ -84,7 +84,10 @@ export class WalletsController {
     @CurrentUser('id') user: UserEntity,
     @Param('currency') currency: Currency,
   ) {
-    const balance = await this.walletsService.getBalance(user.id, currency);
+    const balance = await this.walletsService.getBalanceReadOnly(
+      user.id,
+      currency,
+    );
     return {
       message: 'Balance retrieved successfully',
       data: balance,
@@ -172,6 +175,24 @@ Withdraws funds from wallet.
 
   @Get('convert')
   @ApiOperation({ summary: 'Preview FX conversion' })
+  @ApiQuery({
+    name: 'from',
+    enum: Currency,
+    description: 'Source currency',
+    example: Currency.NGN,
+  })
+  @ApiQuery({
+    name: 'to',
+    enum: Currency,
+    description: 'Target currency',
+    example: Currency.USD,
+  })
+  @ApiQuery({
+    name: 'amount',
+    type: String,
+    description: 'Amount to convert',
+    example: '1000.00',
+  })
   @ApiResponse({
     status: 200,
     example: {

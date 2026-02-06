@@ -1,21 +1,26 @@
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  type IWalletBalanceRepository,
-  type IWalletRepository,
-} from '../repositories/wallet.repository.interface';
-import { type ITransactionRepository } from 'src/modules/transactions/repositories/transaction.repository.interface';
+import { DataSource, QueryRunner } from 'typeorm';
 import { ConflictException, NotFoundException } from 'src/common/exceptions';
 import { ErrorCodes } from 'src/common/constants/error-codes';
+
 import { Currency } from 'src/common/enums/currency.enum';
-import { BalanceCalculator } from '../domain/balance-calculator';
-import { WalletDomain } from '../domain/wallet.domain';
 import { TransactionType } from 'src/common/enums/transaction-type.enum';
 import { TransactionStatus } from 'src/common/enums/transaction-status.enum';
-import { TransactionEntity } from 'src/modules/transactions/entities/transaction.entity';
 import { WalletStatus } from 'src/common/enums/wallet-status.enum';
-import { WalletBalanceEntity } from '../entities/wallet-balance.entity';
-import { FxService } from 'src/modules/fx/services/fx.service';
 
+import { WalletEntity } from '../entities/wallet.entity';
+import { WalletBalanceEntity } from '../entities/wallet-balance.entity';
+import { TransactionEntity } from 'src/modules/transactions/entities/transaction.entity';
+
+import {
+  type IWalletRepository,
+  type IWalletBalanceRepository,
+} from '../repositories/wallet.repository.interface';
+import { type ITransactionRepository } from 'src/modules/transactions/repositories/transaction.repository.interface';
+
+import { BalanceCalculator } from '../domain/balance-calculator';
+import { WalletDomain } from '../domain/wallet.domain';
+import { FxService } from 'src/modules/fx/services/fx.service';
 @Injectable()
 export class WalletsService {
   constructor(
@@ -29,7 +34,73 @@ export class WalletsService {
     private readonly transactionRepo: ITransactionRepository,
 
     private readonly fxService: FxService,
+    private readonly dataSource: DataSource,
   ) {}
+
+  /* ================= READ ================= */
+
+  async getMyWallet(userId: string) {
+    const wallet = await this.walletRepo.findByUserId(userId);
+    if (!wallet) {
+      throw new NotFoundException(
+        ErrorCodes.WALLET_NOT_FOUND,
+        'Wallet not found',
+      );
+    }
+    return wallet;
+  }
+
+  async getBalanceReadOnly(userId: string, currency: Currency) {
+    const wallet = await this.getMyWallet(userId);
+
+    let balance = await this.balanceRepo.findByWalletAndCurrency(
+      wallet.id,
+      currency,
+    );
+
+    if (!balance) {
+      balance = await this.balanceRepo.save({
+        walletId: wallet.id,
+        currency,
+        balance: '0',
+      } as WalletBalanceEntity);
+    }
+
+    return balance;
+  }
+
+  async getBalance(
+    userId: string,
+    currency: Currency,
+    queryRunner: QueryRunner,
+  ) {
+    const wallet = await this.walletRepo.findByUserId(userId, queryRunner);
+    if (!wallet) {
+      throw new NotFoundException(
+        ErrorCodes.WALLET_NOT_FOUND,
+        'Wallet not found',
+      );
+    }
+
+    let balance = await this.balanceRepo.findByWalletAndCurrency(
+      wallet.id,
+      currency,
+      queryRunner,
+    );
+
+    if (!balance) {
+      balance = await this.balanceRepo.save(
+        {
+          walletId: wallet.id,
+          currency,
+          balance: '0',
+        } as WalletBalanceEntity,
+        queryRunner,
+      );
+    }
+
+    return { wallet, balance };
+  }
 
   //  Create wallet + initial NGN balance
   async createWalletForUser(userId: string) {
@@ -51,78 +122,64 @@ export class WalletsService {
     return wallet;
   }
 
-  async getMyWallet(userId: string) {
-    const wallet = await this.walletRepo.findByUserId(userId);
-    if (!wallet) {
-      throw new NotFoundException(
-        ErrorCodes.WALLET_NOT_FOUND,
-        'Wallet not found',
-      );
-    }
-    return wallet;
-  }
+  /* ================= FUND ================= */
 
-  // get balance for currency (auto-create if missing)
-  async getBalance(userId: string, currency: Currency) {
-    const wallet = await this.getMyWallet(userId);
-
-    let balance = await this.balanceRepo.findByWalletAndCurrency(
-      wallet.id,
-      currency,
-    );
-
-    if (!balance) {
-      balance = new WalletBalanceEntity();
-      balance.walletId = wallet.id;
-      balance.currency = currency;
-      balance.balance = '0';
-      await this.balanceRepo.save(balance);
-    }
-
-    return balance;
-  }
-
-  //FUND wallet
   async fundWallet(
     userId: string,
     currency: Currency,
     amount: string,
     idempotencyKey: string,
   ) {
-    const wallet = await this.getMyWallet(userId);
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
 
-    const domain = new WalletDomain(wallet.id, wallet.userId, wallet.status);
-    domain.ensureActive();
+    try {
+      const existingTx = await this.transactionRepo.findByIdempotencyKey(
+        userId,
+        idempotencyKey,
+        qr,
+      );
+      if (existingTx) return existingTx;
 
-    const existingTx =
-      await this.transactionRepo.findByIdempotencyKey(idempotencyKey);
-    if (existingTx) return existingTx;
+      const { wallet, balance } = await this.getBalance(userId, currency, qr);
 
-    const balance = await this.getBalance(userId, currency);
+      new WalletDomain(wallet.id, wallet.userId, wallet.status).ensureActive();
 
-    await this.balanceRepo.lockBalance(balance.id);
+      await this.balanceRepo.lockBalance(balance.id, qr);
 
-    balance.balance = BalanceCalculator.credit(balance.balance, amount);
+      balance.balance = BalanceCalculator.credit(balance.balance, amount);
+      await this.balanceRepo.save(balance, qr);
 
-    await this.balanceRepo.save(balance);
+      const tx = await this.transactionRepo.save(
+        {
+          walletId: wallet.id,
+          userId,
+          type: TransactionType.FUND,
+          status: TransactionStatus.COMPLETED,
+          fromCurrency: currency,
+          toCurrency: currency,
+          fromAmount: amount,
+          toAmount: amount,
+          rate: '1',
+          fee: '0',
+          idempotencyKey,
+          completedAt: new Date(),
+        } as TransactionEntity,
+        qr,
+      );
 
-    const tx = this.transactionRepo.save({
-      walletId: wallet.id,
-      userId,
-      type: TransactionType.FUND,
-      status: TransactionStatus.COMPLETED,
-      fromCurrency: currency,
-      toCurrency: currency,
-      fromAmount: amount,
-      toAmount: amount,
-      rate: '1',
-      fee: '0',
-      idempotencyKey,
-      completedAt: new Date(),
-    } as TransactionEntity);
-
-    return tx;
+      await qr.commitTransaction();
+      return tx;
+    } catch (e) {
+      await qr.rollbackTransaction();
+      throw e;
+    } finally {
+      await qr.release();
+    }
   }
+
+  /* ================= WITHDRAW ================= */
 
   async withdrawWallet(
     userId: string,
@@ -130,45 +187,64 @@ export class WalletsService {
     amount: string,
     idempotencyKey: string,
   ) {
-    const wallet = await this.getMyWallet(userId);
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
 
-    const balance = await this.getBalance(userId, currency);
-
-    if (!BalanceCalculator.canDebit(balance.balance, amount)) {
-      throw new ConflictException(
-        ErrorCodes.WALLET_INSUFFICIENT_BALANCE,
-        'Insufficient funds',
+    try {
+      const existingTx = await this.transactionRepo.findByIdempotencyKey(
+        userId,
+        idempotencyKey,
+        qr,
       );
+      if (existingTx) return existingTx;
+
+      const { wallet, balance } = await this.getBalance(userId, currency, qr);
+
+      new WalletDomain(wallet.id, wallet.userId, wallet.status).ensureActive();
+
+      if (!BalanceCalculator.canDebit(balance.balance, amount)) {
+        throw new ConflictException(
+          ErrorCodes.WALLET_INSUFFICIENT_BALANCE,
+          'Insufficient funds',
+        );
+      }
+
+      await this.balanceRepo.lockBalance(balance.id, qr);
+
+      balance.balance = BalanceCalculator.debit(balance.balance, amount);
+      await this.balanceRepo.save(balance, qr);
+
+      const tx = await this.transactionRepo.save(
+        {
+          walletId: wallet.id,
+          userId,
+          type: TransactionType.WITHDRAW,
+          status: TransactionStatus.COMPLETED,
+          fromCurrency: currency,
+          toCurrency: currency,
+          fromAmount: amount,
+          toAmount: amount,
+          rate: '1',
+          fee: '0',
+          idempotencyKey,
+          completedAt: new Date(),
+        } as TransactionEntity,
+        qr,
+      );
+
+      await qr.commitTransaction();
+      return tx;
+    } catch (e) {
+      await qr.rollbackTransaction();
+      throw e;
+    } finally {
+      await qr.release();
     }
-
-    const existingTx =
-      await this.transactionRepo.findByIdempotencyKey(idempotencyKey);
-    if (existingTx) return existingTx;
-
-    await this.balanceRepo.lockBalance(balance.id);
-
-    balance.balance = BalanceCalculator.debit(balance.balance, amount);
-    await this.balanceRepo.save(balance);
-
-    const tx = await this.transactionRepo.save({
-      walletId: wallet.id,
-      userId,
-      type: TransactionType.WITHDRAW,
-      status: TransactionStatus.COMPLETED,
-      fromCurrency: currency,
-      toCurrency: currency,
-      fromAmount: amount,
-      toAmount: amount,
-      rate: '1',
-      fee: '0',
-      idempotencyKey,
-      completedAt: new Date(),
-    } as TransactionEntity);
-
-    return tx;
   }
 
-  // TRADE (FX)
+  /* ================= TRADE ================= */
+
   async trade(
     userId: string,
     from: Currency,
@@ -176,51 +252,86 @@ export class WalletsService {
     amount: string,
     idempotencyKey: string,
   ) {
-    const wallet = await this.getMyWallet(userId);
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
 
-    const fromBalance = await this.getBalance(userId, from);
-
-    const toBalance = await this.getBalance(userId, to);
-
-    if (!BalanceCalculator.canDebit(fromBalance.balance, amount)) {
-      throw new ConflictException(
-        ErrorCodes.WALLET_INSUFFICIENT_BALANCE,
-        'Insufficient funds',
+    try {
+      const existingTx = await this.transactionRepo.findByIdempotencyKey(
+        userId,
+        idempotencyKey,
+        qr,
       );
+      if (existingTx) return existingTx;
+
+      const { wallet, balance: fromBalance } = await this.getBalance(
+        userId,
+        from,
+        qr,
+      );
+      const { balance: toBalance } = await this.getBalance(userId, to, qr);
+
+      new WalletDomain(wallet.id, wallet.userId, wallet.status).ensureActive();
+
+      if (!BalanceCalculator.canDebit(fromBalance.balance, amount)) {
+        throw new ConflictException(
+          ErrorCodes.WALLET_INSUFFICIENT_BALANCE,
+          'Insufficient funds',
+        );
+      }
+
+      const [first, second] =
+        fromBalance.id < toBalance.id
+          ? [fromBalance, toBalance]
+          : [toBalance, fromBalance];
+
+      await this.balanceRepo.lockBalance(first.id, qr);
+      await this.balanceRepo.lockBalance(second.id, qr);
+
+      const { rate } = await this.fxService.getRate(from, to);
+      const converted = BalanceCalculator.multiply(amount, rate);
+
+      fromBalance.balance = BalanceCalculator.debit(
+        fromBalance.balance,
+        amount,
+      );
+      toBalance.balance = BalanceCalculator.credit(
+        toBalance.balance,
+        converted,
+      );
+
+      await this.balanceRepo.save(fromBalance, qr);
+      await this.balanceRepo.save(toBalance, qr);
+
+      const tx = await this.transactionRepo.save(
+        {
+          walletId: wallet.id,
+          userId,
+          type: TransactionType.TRADE,
+          status: TransactionStatus.COMPLETED,
+          fromCurrency: from,
+          toCurrency: to,
+          fromAmount: amount,
+          toAmount: converted,
+          rate,
+          fee: '0',
+          idempotencyKey,
+          completedAt: new Date(),
+        } as TransactionEntity,
+        qr,
+      );
+
+      await qr.commitTransaction();
+      return tx;
+    } catch (e) {
+      await qr.rollbackTransaction();
+      throw e;
+    } finally {
+      await qr.release();
     }
-
-    const existingTx =
-      await this.transactionRepo.findByIdempotencyKey(idempotencyKey);
-    if (existingTx) return existingTx;
-
-    await this.balanceRepo.lockBalance(fromBalance.id);
-    await this.balanceRepo.lockBalance(toBalance.id);
-
-    const rate = await this.fxService.getRate(from, to);
-
-    const converted = (Number(amount) * Number(rate)).toFixed(8);
-
-    fromBalance.balance = BalanceCalculator.debit(fromBalance.balance, amount);
-    toBalance.balance = BalanceCalculator.credit(toBalance.balance, converted);
-
-    await this.balanceRepo.save(fromBalance);
-    await this.balanceRepo.save(toBalance);
-
-    return this.transactionRepo.save({
-      walletId: wallet.id,
-      userId,
-      type: TransactionType.TRADE,
-      status: TransactionStatus.COMPLETED,
-      fromCurrency: from,
-      toCurrency: to,
-      fromAmount: amount,
-      toAmount: converted,
-      rate,
-      fee: '0',
-      idempotencyKey,
-      completedAt: new Date(),
-    } as TransactionEntity);
   }
+
+  /* ================= TRANSFER ================= */
 
   async transfer(
     senderUserId: string,
@@ -236,84 +347,107 @@ export class WalletsService {
       );
     }
 
-    const existingTx = await this.transactionRepo.findByIdempotencyKey(
-      idempotencyKey + '_OUT',
-    );
-    if (existingTx) return existingTx;
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
 
-    const senderWallet = await this.walletRepo.findByUserId(senderUserId);
-    if (!senderWallet)
-      throw new NotFoundException(
-        ErrorCodes.WALLET_NOT_FOUND,
-        'Sender wallet not found',
+    try {
+      const existingTx = await this.transactionRepo.findByIdempotencyKey(
+        `${senderUserId}`,
+        `${idempotencyKey}_OUT`,
+        qr,
+      );
+      if (existingTx) return existingTx;
+
+      const { wallet: senderWallet, balance: senderBalance } =
+        await this.getBalance(senderUserId, currency, qr);
+      const { wallet: receiverWallet, balance: receiverBalance } =
+        await this.getBalance(receiverUserId, currency, qr);
+
+      new WalletDomain(
+        senderWallet.id,
+        senderWallet.userId,
+        senderWallet.status,
+      ).ensureActive();
+
+      new WalletDomain(
+        receiverWallet.id,
+        receiverWallet.userId,
+        receiverWallet.status,
+      ).ensureActive();
+
+      if (!BalanceCalculator.canDebit(senderBalance.balance, amount)) {
+        throw new ConflictException(
+          ErrorCodes.WALLET_INSUFFICIENT_BALANCE,
+          'Insufficient funds',
+        );
+      }
+
+      const [first, second] =
+        senderBalance.id < receiverBalance.id
+          ? [senderBalance, receiverBalance]
+          : [receiverBalance, senderBalance];
+
+      await this.balanceRepo.lockBalance(first.id, qr);
+      await this.balanceRepo.lockBalance(second.id, qr);
+
+      senderBalance.balance = BalanceCalculator.debit(
+        senderBalance.balance,
+        amount,
+      );
+      receiverBalance.balance = BalanceCalculator.credit(
+        receiverBalance.balance,
+        amount,
       );
 
-    const receiverWallet = await this.walletRepo.findByUserId(receiverUserId);
-    if (!receiverWallet)
-      throw new NotFoundException(
-        ErrorCodes.WALLET_NOT_FOUND,
-        'Receiver wallet not found',
+      await this.balanceRepo.save(senderBalance, qr);
+      await this.balanceRepo.save(receiverBalance, qr);
+
+      await this.transactionRepo.save(
+        {
+          walletId: senderWallet.id,
+          userId: senderUserId,
+          type: TransactionType.TRANSFER,
+          status: TransactionStatus.COMPLETED,
+          fromCurrency: currency,
+          toCurrency: currency,
+          fromAmount: amount,
+          toAmount: amount,
+          rate: '1',
+          fee: '0',
+          idempotencyKey: `${idempotencyKey}_OUT`,
+          metadata: { toUserId: receiverUserId },
+          completedAt: new Date(),
+        },
+        qr,
       );
 
-    const senderBalance = await this.getBalance(senderUserId, currency);
-    const receiverBalance = await this.getBalance(receiverUserId, currency);
-
-    if (!BalanceCalculator.canDebit(senderBalance.balance, amount)) {
-      throw new ConflictException(
-        ErrorCodes.WALLET_INSUFFICIENT_BALANCE,
-        'Insufficient funds',
+      const receiverTx = await this.transactionRepo.save(
+        {
+          walletId: receiverWallet.id,
+          userId: receiverUserId,
+          type: TransactionType.TRANSFER,
+          status: TransactionStatus.COMPLETED,
+          fromCurrency: currency,
+          toCurrency: currency,
+          fromAmount: amount,
+          toAmount: amount,
+          rate: '1',
+          fee: '0',
+          idempotencyKey: `${idempotencyKey}_IN`,
+          metadata: { fromUserId: senderUserId },
+          completedAt: new Date(),
+        },
+        qr,
       );
+
+      await qr.commitTransaction();
+      return receiverTx;
+    } catch (e) {
+      await qr.rollbackTransaction();
+      throw e;
+    } finally {
+      await qr.release();
     }
-
-    // lock in deterministic order
-    await this.balanceRepo.lockBalance(senderBalance.id);
-    await this.balanceRepo.lockBalance(receiverBalance.id);
-
-    senderBalance.balance = BalanceCalculator.debit(
-      senderBalance.balance,
-      amount,
-    );
-    receiverBalance.balance = BalanceCalculator.credit(
-      receiverBalance.balance,
-      amount,
-    );
-
-    await this.balanceRepo.save(senderBalance);
-    await this.balanceRepo.save(receiverBalance);
-
-    const senderTx = new TransactionEntity();
-    senderTx.walletId = senderWallet.id;
-    senderTx.userId = senderUserId;
-    senderTx.type = TransactionType.TRANSFER;
-    senderTx.status = TransactionStatus.COMPLETED;
-    senderTx.fromCurrency = currency;
-    senderTx.toCurrency = currency;
-    senderTx.fromAmount = amount;
-    senderTx.toAmount = amount;
-    senderTx.rate = '1';
-    senderTx.fee = '0';
-    senderTx.idempotencyKey = `${idempotencyKey}_OUT`;
-    senderTx.metadata = { toUserId: receiverUserId };
-    senderTx.completedAt = new Date();
-
-    const receiverTx = new TransactionEntity();
-    receiverTx.walletId = receiverWallet.id;
-    receiverTx.userId = receiverUserId;
-    receiverTx.type = TransactionType.TRANSFER;
-    receiverTx.status = TransactionStatus.COMPLETED;
-    receiverTx.fromCurrency = currency;
-    receiverTx.toCurrency = currency;
-    receiverTx.fromAmount = amount;
-    receiverTx.toAmount = amount;
-    receiverTx.rate = '1';
-    receiverTx.fee = '0';
-    receiverTx.idempotencyKey = `${idempotencyKey}_IN`;
-    receiverTx.metadata = { fromUserId: senderUserId };
-    receiverTx.completedAt = new Date();
-
-    await this.transactionRepo.save(senderTx);
-    await this.transactionRepo.save(receiverTx);
-
-    return senderTx;
   }
 }
