@@ -22,6 +22,7 @@
   "dependencies": {
     "@fastify/compress": "^8.3.1",
     "@fastify/helmet": "^13.0.2",
+    "@fastify/static": "^9.0.0",
     "@getbrevo/brevo": "^3.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -30,6 +31,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-fastify": "^11.1.13",
+    "@nestjs/swagger": "^11.2.6",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.0",
     "axios": "^1.13.4",
